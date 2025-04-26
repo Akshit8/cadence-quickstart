@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-const clientName = "Travel-App-Frontend"
+const clientName = "travel-app-frontend"
 
 var logger *zap.Logger
 
@@ -42,7 +42,7 @@ func main() {
 	cdClient.StartWorkflow(context.Background(), client.StartWorkflowOptions{
 		TaskList:                     config.TaskListName,
 		ExecutionStartToCloseTimeout: 10 * time.Second,
-	}, "TravelBookingWorkflow", input)
+	}, "main.TravelBookingWorkflow", input)
 }
 
 func buildCadenceClient() workflowserviceclient.Interface {

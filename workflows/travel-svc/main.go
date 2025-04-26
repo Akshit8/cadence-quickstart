@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"go.uber.org/cadence/.gen/go/cadence/workflowserviceclient"
+	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/worker"
 	"go.uber.org/cadence/workflow"
 
@@ -17,7 +22,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-const clientName = "Travel-App-Svc"
+const clientName = "travel-app-service"
 
 var logger *zap.Logger
 
@@ -28,6 +33,11 @@ func init() {
 
 	// register workflow
 	workflow.Register(TravelBookingWorkflow)
+
+	// register activities
+	activity.Register(BookHotelActivity)
+	activity.Register(BookCarActivity)
+	activity.Register(BookAirplaneActivity)
 }
 
 func main() {
@@ -38,6 +48,19 @@ func main() {
 		logger.Fatal("Failed to start worker")
 	}
 	logger.Info("Started Worker.", zap.String("worker", config.TaskListName))
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+
+	for {
+		select {
+		case <-signalChan:
+			logger.Info("Received shutdown signal")
+			worker.Stop()
+			logger.Info("Worker stopped")
+			return
+		}
+	}
 }
 
 func buildCadenceClient() workflowserviceclient.Interface {
@@ -81,7 +104,7 @@ func TravelBookingWorkflow(ctx workflow.Context, input []byte) error {
 	workflow.GetLogger(ctx).Info("Received booking details", zap.String("name", bd.Name), zap.String("email", bd.Email))
 
 	ao := workflow.ActivityOptions{
-		TaskList:               "sampleTaskList",
+		TaskList:               config.TaskListName,
 		ScheduleToCloseTimeout: time.Second * 60,
 		ScheduleToStartTimeout: time.Second * 60,
 		StartToCloseTimeout:    time.Second * 60,
@@ -90,8 +113,45 @@ func TravelBookingWorkflow(ctx workflow.Context, input []byte) error {
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
-	// TODO: set result
-	workflow.GetLogger(ctx).Info("Done", zap.String("result", ""))
+	// Execute activities in sequence
+	err := workflow.ExecuteActivity(ctx, BookHotelActivity, bd.Name, bd.Email).Get(ctx, nil)
+	if err != nil {
+		workflow.GetLogger(ctx).Error("Failed to book hotel", zap.Error(err))
+	}
 
+	err = workflow.ExecuteActivity(ctx, BookCarActivity, bd.Name, bd.Email).Get(ctx, nil)
+	if err != nil {
+		workflow.GetLogger(ctx).Error("Failed to book car", zap.Error(err))
+	}
+
+	err = workflow.ExecuteActivity(ctx, BookAirplaneActivity, bd.Name, bd.Email).Get(ctx, nil)
+	if err != nil {
+		workflow.GetLogger(ctx).Error("Failed to book airplane", zap.Error(err))
+	}
+
+	// TODO: set result
+	workflow.GetLogger(ctx).Info("Done", zap.String("result", "Booking completed"))
+
+	return nil
+}
+
+func BookHotelActivity(ctx context.Context, name, email string) error {
+	// Simulate hotel booking
+	time.Sleep(2 * time.Second)
+	logger.Info("Hotel booked successfully", zap.String("name", name), zap.String("email", email))
+	return nil
+}
+
+func BookCarActivity(ctx context.Context, name, email string) error {
+	// Simulate hotel booking
+	time.Sleep(2 * time.Second)
+	logger.Info("Car booked successfully", zap.String("name", name), zap.String("email", email))
+	return nil
+}
+
+func BookAirplaneActivity(ctx context.Context, name, email string) error {
+	// Simulate hotel booking
+	time.Sleep(2 * time.Second)
+	logger.Info("Airplane booked successfully", zap.String("name", name), zap.String("email", email))
 	return nil
 }
